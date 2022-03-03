@@ -1,0 +1,195 @@
+/*
+
+Cleaning Data using SQL Queries
+
+*/
+
+select *
+from DataCleaningProject.dbo.NashvilleHousingData$
+
+----------------------------------------------------------------------------------
+
+-- Standardize date format (Included multiple ways to do this)
+
+select SaleDateConverted
+from DataCleaningProject.dbo.NashvilleHousingData$
+
+Alter table DataCleaningProject.dbo.NashvilleHousingData$ 
+add SaleDateConverted date;
+
+Update DataCleaningProject..NashvilleHousingData$
+set SaleDateConverted  = CONVERT (date, SaleDate)
+
+
+
+-- Update using CONVERT function
+update DataCleaningProject..NashvilleHousingData$
+set SaleDate = CONVERT (date, SaleDate)
+
+
+-- Update using ALTER COLUMN 
+alter table DataCleaningProject..NashvilleHousingData$
+alter column SaleDate date;
+
+
+----------------------------------------------------------------------------------
+
+-- Populate Property Address data (Where Property Address is null)
+
+select *
+from DataCleaningProject..NashvilleHousingData$
+--where PropertyAddress is null
+order by ParcelID
+
+
+select a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress, ISNULL(a.PropertyAddress, b.PropertyAddress)
+from DataCleaningProject..NashvilleHousingData$ a
+join DataCleaningProject..NashvilleHousingData$ b 
+	on a.ParcelID = b.ParcelID
+	and a.[UniqueID ] <> b.[UniqueID ]
+where a.PropertyAddress is null
+
+update a
+set PropertyAddress = ISNULL(a.PropertyAddress, b.PropertyAddress)
+from DataCleaningProject..NashvilleHousingData$ a
+join DataCleaningProject..NashvilleHousingData$ b 
+	on a.ParcelID = b.ParcelID
+	and a.[UniqueID ] <> b.[UniqueID ]
+where a.PropertyAddress is null
+
+
+----------------------------------------------------------------------------------
+
+-- Breaking out Property Address into Individual Columns (Address, City)
+-- Included 2 different ways to split the Property Address
+
+select PropertyAddress
+from DataCleaningProject..NashvilleHousingData$
+--where PropertyAddress is null
+--order by ParcelID
+
+
+select 
+SUBSTRING (PropertyAddress, 1, CHARINDEX (',', PropertyAddress) -1) as Address
+, SUBSTRING (PropertyAddress, CHARINDEX (',', PropertyAddress) +1, LEN(PropertyAddress)) as City
+from DataCleaningProject..NashvilleHousingData$
+
+Alter table DataCleaningProject..NashvilleHousingData$
+Add PropertySplitAddress nvarchar(255);
+
+Update DataCleaningProject..NashvilleHousingData$
+Set PropertySplitAddress = SUBSTRING (PropertyAddress, 1, CHARINDEX (',', PropertyAddress) -1) 
+
+Alter table DataCleaningProject..NashvilleHousingData$
+Add PropertySplitCity nvarchar(255);
+
+Update DataCleaningProject..NashvilleHousingData$
+Set PropertySplitCity = SUBSTRING (PropertyAddress, CHARINDEX (',', PropertyAddress) +1, LEN(PropertyAddress))
+
+
+-- Another way to split the Property Address
+select 
+PARSENAME(replace(PropertyAddress, ',', '.'), 2) As PropAddress
+,PARSENAME(replace(PropertyAddress, ',', '.'), 1) as PropCity
+from DataCleaningProject..NashvilleHousingData$
+
+----------------------------------------------------------------------------------
+
+-- -- Breaking out Owner Address into Individual Columns (Address, City, State)
+
+Select OwnerAddress
+from DataCleaningProject..NashvilleHousingData$
+
+
+Select
+PARSENAME(Replace(OwnerAddress, ',', '.'), 3) AS OwnerSplitAddress
+, PARSENAME(Replace(OwnerAddress, ',', '.'), 2) AS OwnerSplitCity
+, PARSENAME(Replace(OwnerAddress, ',', '.'), 1) AS OwnerSplitState
+from DataCleaningProject..NashvilleHousingData$
+
+Alter table DataCleaningProject..NashvilleHousingData$
+Add OwnerSplitAddres nvarchar(255);
+
+Update DataCleaningProject..NashvilleHousingData$
+Set OwnerSplitAddres =  PARSENAME(Replace(OwnerAddress, ',', '.'), 3) 
+
+Alter table DataCleaningProject..NashvilleHousingData$
+Add OwnerSplitCity nvarchar(255);
+
+Update DataCleaningProject..NashvilleHousingData$
+Set OwnerSplitCity = PARSENAME(Replace(OwnerAddress, ',', '.'), 2) 
+
+Alter table DataCleaningProject..NashvilleHousingData$
+Add OwnerSplitState nvarchar(255);
+
+Update DataCleaningProject..NashvilleHousingData$
+Set OwnerSplitState = PARSENAME(Replace(OwnerAddress, ',', '.'), 1)
+
+
+----------------------------------------------------------------------------------
+
+-- Change Y and N to Yes and No in "Sold as Vacant" field
+
+select Distinct(SoldAsVacant), COUNT(SoldAsVacant)
+from DataCleaningProject..NashvilleHousingData$
+group by SoldAsVacant
+order by 2
+
+select SoldAsVacant
+, Case When SoldAsVacant = 'Y' then 'Yes'
+	   When SoldAsVacant = 'N' then 'No'
+	   Else SoldAsVacant 
+End
+from DataCleaningProject..NashvilleHousingData$
+
+Update DataCleaningProject..NashvilleHousingData$
+Set SoldAsVacant = Case When SoldAsVacant = 'Y' then 'Yes'
+	   When SoldAsVacant = 'N' then 'No'
+	   Else SoldAsVacant 
+End
+
+----------------------------------------------------------------------------------
+
+-- Remove Duplicates
+
+SELECT * 
+FROM DataCleaningProject.dbo.NashvilleHousingData$
+
+-- NEED TO USE ORDER BY WHEN USING ROW_NUMBER BC THE FUNCTION IS ORDER SENSITIVE
+
+
+WITH RowNumCTE AS(
+select *,
+	ROW_NUMBER() over(
+	Partition by ParcelID,
+				 PropertyAddress,
+				 SalePrice,
+				 SaleDate,
+				 LegalReference
+				 Order by
+				 UniqueID
+				 ) row_num
+from DataCleaningProject.dbo.NashvilleHousingData$
+--order by ParcelID
+)
+
+Select * 
+-- Delete
+from RowNumCTE
+where row_num > 1
+order by propertyaddress
+
+
+----------------------------------------------------------------------------------
+
+-- Delete Unused columns
+
+SELECT * 
+FROM DataCleaningProject.dbo.NashvilleHousingData$
+
+
+alter table DataCleaningProject.dbo.NashvilleHousingData$
+drop column PropertyAddress, OwnerAddress, TaxDistrict
+
+alter table DataCleaningProject.dbo.NashvilleHousingData$
+drop column SaleDate
